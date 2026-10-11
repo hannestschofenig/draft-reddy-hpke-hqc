@@ -1,0 +1,426 @@
+
+
+
+
+HPKE                                                       H. Tschofenig
+Internet-Draft                                                  UniBw M.
+Intended status: Standards Track                                T. Reddy
+Expires: 14 April 2027                                             Nokia
+                                                         11 October 2026
+
+
+   Hamming Quasi-Cyclic (HQC) Key Encapsulation Mechanisms for Hybrid
+                      Public Key Encryption (HPKE)
+                      draft-reddy-hpke-hqc-latest
+
+Abstract
+
+   This document specifies Hamming Quasi-Cyclic (HQC) key encapsulation
+   mechanisms for use with Hybrid Public Key Encryption (HPKE).  It
+   defines the HPKE KEM interface, deterministic key-pair derivation,
+   public and private key encodings, and input validation for three HQC
+   parameter sets.  It requests three HPKE KEM algorithm identifiers and
+   reuses the existing HPKE key schedule, encryption operations, and
+   export interface.
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   Internet-Drafts are working documents of the Internet Engineering
+   Task Force (IETF).  Note that other groups may also distribute
+   working documents as Internet-Drafts.  The list of current Internet-
+   Drafts is at https://datatracker.ietf.org/drafts/current/.
+
+   Internet-Drafts are draft documents valid for a maximum of six months
+   and may be updated, replaced, or obsoleted by other documents at any
+   time.  It is inappropriate to use Internet-Drafts as reference
+   material or to cite them other than as "work in progress."
+
+   This Internet-Draft will expire on 14 April 2027.
+
+Copyright Notice
+
+   Copyright (c) 2026 IETF Trust and the persons identified as the
+   document authors.  All rights reserved.
+
+   This document is subject to BCP 78 and the IETF Trust's Legal
+   Provisions Relating to IETF Documents (https://trustee.ietf.org/
+   license-info) in effect on the date of publication of this document.
+   Please review these documents carefully, as they describe your rights
+   and restrictions with respect to this document.  Code Components
+   extracted from this document must include Revised BSD License text as
+   described in Section 4.e of the Trust Legal Provisions and are
+   provided without warranty as described in the Revised BSD License.
+
+Table of Contents
+
+   1.  Introduction
+   2.  Conventions and Terminology
+   3.  HQC KEMs for HPKE
+     3.1.  Parameters and Constants
+     3.2.  Seed Expansion
+     3.3.  Randomized Key Generation
+     3.4.  Deterministic Key Derivation
+     3.5.  Key Serialization
+     3.6.  Encapsulation
+     3.7.  Decapsulation
+   4.  HPKE Modes and Ciphersuites
+   5.  Security Considerations
+   6.  IANA Considerations
+   7.  References
+     7.1.  Normative References
+     7.2.  Informative References
+   Authors' Addresses
+
+1.  Introduction
+
+   Hybrid Public Key Encryption (HPKE) [HPKE] combines a key
+   encapsulation mechanism (KEM), a key derivation function (KDF), and
+   an authenticated encryption with associated data (AEAD) algorithm.
+   Its KEM interface allows additional algorithms to be specified
+   independently of an application protocol.
+
+   This document adds HQC to that interface.  HQC offers a code-based
+   alternative to the lattice-based ML-KEM mechanisms specified for HPKE
+   in [PQ-HPKE].  NIST selected HQC for standardization following its
+   fourth-round evaluation [NIST.IR.8545].
+
+   This document specifies standalone HQC KEMs.  It does not combine HQC
+   with another KEM or a traditional key exchange.  In particular, the
+   word "hybrid" in HPKE refers to its public-key and symmetric
+   construction and does not by itself denote a post-quantum/traditional
+   hybrid KEM.
+
+   This specification does not change the HPKE key schedule or message
+   encryption.
+
+2.  Conventions and Terminology
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT",
+   "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY", and
+   "OPTIONAL" in this document are to be interpreted as described in
+   BCP 14 [RFC2119] [RFC8174] when, and only when, they appear in all
+   capitals, as shown here.
+
+   The notation and interfaces of [HPKE] apply.  All lengths below are
+   in octets unless stated otherwise. || denotes byte-string
+   concatenation.  Quoted strings in pseudocode denote ASCII byte
+   strings, and "" denotes an empty byte string.
+
+   pk denotes an encoded public encapsulation key. sk denotes the
+   private seed representation defined in this document. expanded_sk
+   denotes an internal HQC decapsulation key. enc is the complete HQC
+   KEM ciphertext, and shared_secret is the KEM output supplied to HPKE.
+   kem_id is the assigned two-octet HPKE KEM identifier.
+
+3.  HQC KEMs for HPKE
+
+3.1.  Parameters and Constants
+
+   The three KEMs use HQC-KEM from Section 3.6 of [HQC].
+   Implementations MUST use the complete KEM, including its specified
+   implicit rejection, and MUST NOT substitute the underlying HQC-PKE
+   encryption scheme.
+
+                 +=======+=========+=======+======+=====+
+                 | KEM   | Nsecret |  Nenc |  Npk | Nsk |
+                 +=======+=========+=======+======+=====+
+                 | HQC-1 |      32 |  4433 | 2241 |  32 |
+                 +-------+---------+-------+------+-----+
+                 | HQC-3 |      32 |  8978 | 4514 |  32 |
+                 +-------+---------+-------+------+-----+
+                 | HQC-5 |      32 | 14421 | 7237 |  32 |
+                 +-------+---------+-------+------+-----+
+
+                  Table 1: HPKE KEM constants in octets
+
+   The public key and ciphertext encodings are those of [HQC],
+   Section 4.  This profile selects its compressed seedKEM private-key
+   representation.  Nsk describes that serialization, not the size of an
+   expanded internal key.  Implementations MUST determine the parameter
+   set from the selected KEM identifier and MUST NOT infer the parameter
+   set from Nsk or Nsecret.
+
+3.2.  Seed Expansion
+
+   The following helper defines the connection between the serialized
+   private seed and the HQC key-generation procedure:
+
+   ExpandSeed(seed):
+       Require length(seed) == 32
+       Run HQC-KEM.Keygen for the selected parameter set,
+           with seedKEM set to seed instead of sampling it.
+       Return (dkKEM, ekKEM) as (expanded_sk, pk).
+
+   The first sampling step of HQC-KEM.Keygen in Section 3.6 of [HQC]
+   uses the supplied seed and all subsequent steps are performed
+   unchanged.  No additional randomness is required.  This includes the
+   specified expansion of seedKEM and construction of the public key and
+   rejection material.  Thus the helper is deterministic.  The byte
+   encodings and internal XOF operations are inherited from the HQC
+   procedure and are not repeated by this document.
+
+   An implementation MAY cache expanded_sk and pk.  Such caching MUST
+   produce the same results as expansion of the stored seed.  A supplied
+   public key accompanying a private seed MUST be checked against the
+   regenerated public key and a mismatch MUST be rejected.
+
+3.3.  Randomized Key Generation
+
+   GenerateKeyPair returns the private key first, as required by HPKE:
+
+   def GenerateKeyPair():
+       sk = random(32)
+       (_expanded_sk, pk) = ExpandSeed(sk)
+       return (sk, pk)
+
+   The random bytes MUST satisfy the randomness requirements of [HQC].
+   This is the HQC key-generation distribution with the private key
+   returned in compressed form.  Random key generation does not apply
+   LabeledDerive to the already sampled seed.
+
+3.4.  Deterministic Key Derivation
+
+   For DeriveKeyPair, this document uses the SHAKE256 single-stage KDF
+   specified in Section 5 of [PQ-HPKE], with the LabeledDerive
+   construction of Section 4.4 of [HPKE].  Its KEM-local domain
+   separator is:
+
+   suite_id = "KEM" || I2OSP(kem_id, 2)
+
+   def DeriveKeyPair(ikm):
+       sk = SHAKE256.LabeledDerive(ikm, "DeriveKeyPair", "", 32)
+       (_expanded_sk, pk) = ExpandSeed(sk)
+       return (sk, pk)
+
+   The label, empty context, output length, and KEM-specific suite_id
+   MUST be used exactly as shown.  LabeledDerive includes the HPKE
+   version label and input formatting defined by [HPKE]; it is not an
+   unlabelled SHAKE256 call.  The input-length restrictions of [HPKE]
+   apply.
+
+   The input SHOULD have at least 32 octets of entropy.  An ikm input
+   MUST NOT be reused for other purposes, including key derivation for
+   another KEM, as required by Section 9.2.1 of [HPKE].
+
+   SHAKE256 in this function is fixed by the KEM definition.  It does
+   not select the KDF used by the rest of the HPKE ciphersuite.  In
+   particular, a caller MUST NOT change this function when selecting
+   another HPKE key-schedule KDF.
+
+3.5.  Key Serialization
+
+   For the interface in this document, public keys and private seeds are
+   already byte strings.  SerializePublicKey(pk) returns the raw Npk
+   octets.  SerializePrivateKey(sk) returns the raw 32-octet seed.
+   Neither encoding includes a parameter-set identifier, length prefix,
+   ASN.1 wrapper, or application encoding.
+
+   DeserializePublicKey MUST reject inputs whose length is not Npk for
+   the selected KEM and MUST perform the applicable public-key encoding
+   checks of [HQC].  It returns the raw public key on success.
+   DeserializePrivateKey MUST reject inputs whose length is not 32 and
+   returns the seed on success.  These failures are DeserializeError.
+   An expanded private key MUST NOT be accepted as an alternative
+   serialization, even if an implementation uses that form internally.
+
+   pk(sk) is the public key returned by ExpandSeed(sk).  A private-key
+   object MAY store the seed, the expanded key, and a cached public key,
+   but MUST retain the specified seed serialization for export.
+
+3.6.  Encapsulation
+
+   Encap(pkR) performs HQC-KEM.Encaps for the selected parameter set:
+
+   def Encap(pkR):
+       Check the length and encoding of pkR for the selected KEM.
+       (K, cKEM) = HQC-KEM.Encaps(pkR)
+       return (K, cKEM)
+
+   The outputs are the HPKE shared_secret and enc, respectively.  The
+   complete ciphertext, including all its HQC-defined components, MUST
+   be returned.  Encapsulation MUST use fresh randomness satisfying
+   [HQC] for every invocation.
+
+   Failures of the public-key checks or an explicit failure of the
+   encapsulation operation MUST cause EncapError when they occur within
+   this interface.  Prior deserialization failures use DeserializeError.
+   A raw HQC shared secret is passed to HPKE without an additional COSE
+   KDF, DHKEM ExtractAndExpand step, or application-specific hash.
+
+3.7.  Decapsulation
+
+   Decap(enc, skR) expands the seed and invokes HQC-KEM.Decaps:
+
+   def Decap(enc, skR):
+       Require length(enc) == Nenc
+       Require length(skR) == 32
+       (expanded_sk, _pkR) = ExpandSeed(skR)
+       return HQC-KEM.Decaps(expanded_sk, enc)
+
+   The two arguments to HQC-KEM.Decaps above are its decapsulation key
+   and ciphertext, in that order.  Any additional input checks required
+   by [HQC] MUST also be performed.  A failed explicit input check or
+   explicit decapsulation failure MUST cause DecapError within this
+   interface.  No shared secret is returned after such a failure.
+
+   Implicit rejection is part of HQC-KEM.Decaps and is not an explicit
+   error.  Its replacement shared secret MUST be passed to HPKE in the
+   same way as any other decapsulation output.  Implementations MUST NOT
+   expose the internal ciphertext-consistency result as an additional
+   success flag or error.  An incorrect shared secret is handled by the
+   subsequent HPKE authentication checks when ciphertexts are opened.
+   Secret export alone is not an authentication or key-confirmation
+   step.
+
+4.  HPKE Modes and Ciphersuites
+
+   These KEMs can be used with the Base and PSK modes of [HPKE].  HPKE's
+   setup, encryption, sequence-number handling, and export procedures
+   apply unchanged.  The KDF and AEAD are selected independently subject
+   to the security requirements of Sections 9.3 and 9.4 of [HPKE].
+
+   The SHAKE256 KDF in [PQ-HPKE] can also be used for the HPKE key
+   schedule.  HKDF-based ciphersuites remain possible.  This document
+   does not register a new KDF or AEAD or mandate a single application
+   ciphersuite.
+
+   The AuthEncap and AuthDecap interfaces of RFC 9180 are not defined
+   for these KEMs.  The HPKE KEM registry's legacy Auth column is no.
+   This does not prevent using the PSK mode, which is part of the HPKE
+   key schedule rather than asymmetric sender authentication by the KEM.
+
+   A KEM identifier is a cryptographic parameter, not a complete message
+   format.  Applications remain responsible for selecting and conveying
+   ciphersuites and for transporting enc and the HPKE ciphertext.
+
+5.  Security Considerations
+
+   The security considerations of [HQC], [HPKE], and [PQ-HPKE] apply.
+   HQC provides mathematical diversity from ML-KEM, but selecting HQC
+   alone does not provide the security of a combined hybrid KEM.
+
+   HPKE requires a CCA-secure KEM with the shared-secret properties
+   specified in Section 9.2 of [HPKE].  This specification uses the
+   complete HQC-KEM construction and its shared-secret output.
+
+   Editorial note: The application of the HPKE security analyses to this
+   exact HQC revision needs review before publication.  In particular,
+   this document does not establish the additional LEAK-BIND-K-PK and
+   LEAK-BIND-K-CT properties discussed in Section 7 of [PQ-HPKE].  Their
+   applicability to HQC must be assessed separately.
+
+   The security of a complete ciphersuite is limited by its components,
+   including any PSK and the KDF and AEAD.  The length of the KEM output
+   does not by itself determine the security strength.  Applications
+   MUST NOT treat a longer AEAD key as increasing the security category
+   of the selected HQC parameter set.
+
+   All secret randomness MUST come from a cryptographically secure
+   source.  The private seed is sufficient to reconstruct the entire
+   private key and MUST receive the same protection as an expanded
+   private key.  Implementations SHOULD erase temporary secret material
+   when no longer needed and SHOULD use constant-time implementations
+   for secret-dependent computations.  They MUST preserve implicit
+   rejection and avoid exposing secret-dependent behavior through
+   timing, logs, or error handling.
+
+   Recipient public keys require authenticated distribution appropriate
+   to the application.  Base mode does not authenticate the sender.
+   Long-term recipient key compromise permits decapsulation of recorded
+   messages; this construction does not provide forward secrecy against
+   that compromise.  PSK selection and handling follow [HPKE].
+
+   The domain separator in Section 3.4 prevents accidental equivalence
+   of key derivations between KEM identifiers, but does not authorize
+   seed or ikm reuse across protocols.  Implementations MUST enforce the
+   selected parameter set and MUST NOT retry with a different KEM or
+   older HQC revision when input validation or decryption fails.
+
+   HQC's public keys and ciphertexts impose substantial per-recipient
+   message overhead.  Applications SHOULD bound allocation and
+   processing before performing expensive cryptographic operations.
+   Transport, fragmentation, reassembly, and total message-size limits
+   need to account for the values in Table 1.
+
+6.  IANA Considerations
+
+   IANA is requested to add the following entries to the "HPKE KEM
+   Identifiers" registry [HPKE-IANA], using the template in Section 11.2
+   of [HPKE].
+
+        +===========+=======+=========+=======+======+=====+======+
+        | Value     | KEM   | Nsecret |  Nenc |  Npk | Nsk | Auth |
+        +===========+=======+=========+=======+======+=====+======+
+        | TBD-HQC-1 | HQC-1 |      32 |  4433 | 2241 |  32 | no   |
+        +-----------+-------+---------+-------+------+-----+------+
+        | TBD-HQC-3 | HQC-3 |      32 |  8978 | 4514 |  32 | no   |
+        +-----------+-------+---------+-------+------+-----+------+
+        | TBD-HQC-5 | HQC-5 |      32 | 14421 | 7237 |  32 | no   |
+        +-----------+-------+---------+-------+------+-----+------+
+
+               Table 2: Requested HQC HPKE KEM registrations
+
+   The Reference for every row is this document, Section 3.  Each TBD
+   denotes a distinct two-octet identifier to be assigned by IANA.
+
+   This document requests no KDF or AEAD registrations.
+
+7.  References
+
+7.1.  Normative References
+
+   [HPKE]     Barnes, R., Bhargavan, K., Lipp, B., and C. A. Wood,
+              "Hybrid Public Key Encryption", Work in Progress,
+              Internet-Draft, draft-ietf-hpke-hpke-05, 25 September
+              2026, <https://datatracker.ietf.org/doc/html/draft-ietf-
+              hpke-hpke-05>.
+
+   [HQC]      HQC Project, "Hamming Quasi-Cyclic (HQC)", 22 August 2025,
+              <https://pqc-hqc.org/doc/
+              hqc_specifications_2025_08_22.pdf>.
+
+   [PQ-HPKE]  Barnes, R. and D. Connolly, "Post-Quantum and Post-
+              Quantum/Traditional Hybrid Algorithms for HPKE", Work in
+              Progress, Internet-Draft, draft-ietf-hpke-pq-05, 6 July
+              2026, <https://datatracker.ietf.org/doc/html/draft-ietf-
+              hpke-pq-05>.
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119,
+              DOI 10.17487/RFC2119, March 1997,
+              <https://www.rfc-editor.org/rfc/rfc2119>.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in RFC
+              2119 Key Words", BCP 14, RFC 8174, DOI 10.17487/RFC8174,
+              May 2017, <https://www.rfc-editor.org/rfc/rfc8174>.
+
+7.2.  Informative References
+
+   [HPKE-IANA]
+              IANA, "Hybrid Public Key Encryption (HPKE)", n.d.,
+              <https://www.iana.org/assignments/hpke/>.
+
+   [NIST.IR.8545]
+              National Institute of Standards and Technology, "Status
+              Report on the Fourth Round of the NIST Post-Quantum
+              Cryptography Standardization Process", March 2025,
+              <https://doi.org/10.6028/NIST.IR.8545>.
+
+Authors' Addresses
+
+   Hannes Tschofenig
+   University of the Bundeswehr Munich
+   85577 Neubiberg
+   Germany
+   Email: hannes.tschofenig@gmx.net
+
+
+   Tirumaleswar Reddy
+   Nokia
+   Bangalore
+   Karnataka
+   India
+   Email: kondtir@gmail.com
