@@ -6,8 +6,8 @@ category: std
 ipr: trust200902
 submissiontype: IETF
 v: 3
-area: Security
-workgroup: HPKE
+area: "Security"
+workgroup: "HPKE Publication, Kept Efficient"
 keyword:
 - HQC
 - HPKE
