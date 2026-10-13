@@ -66,6 +66,18 @@ informative:
     - name: Niklas Medinger
     date: 2023
     target: https://eprint.iacr.org/2023/1933.pdf
+  CHH25:
+    title: "Starfighters: On the General Applicability of X-Wing"
+    author:
+    - name: Deirdre Connolly
+    - name: Kathrin Hövelmanns
+    - name: Andreas Hülsing
+    - name: Stavros Kousidis
+    - name: Matthias Meijers
+    date: 2025
+    seriesinfo:
+      DOI: 10.1109/SP63933.2026.00143
+    target: https://eprint.iacr.org/2025/1397
 
 --- abstract
 
@@ -302,9 +314,16 @@ Secret export alone is not an authentication or key-confirmation step.
 This section defines three PQ/T hybrid KEMs that combine HQC with an
 elliptic-curve group: HQC3-P256, HQC3-X25519, and HQC5-P384. Each
 instantiates the C2PRI Combiner with a Nominal Group (CG) framework
-of Section 5.5 of {{GENERIC}}. C2PRI denotes ciphertext
-second-preimage resistance, which HQC provides as noted in
-Section 6.1.2 of {{GENERIC}}.
+of Section 5.5 of {{GENERIC}}.
+
+C2PRI denotes ciphertext second-preimage resistance: given an
+honestly generated ciphertext, it is infeasible to find a different
+ciphertext that decapsulates to the same shared secret. The CG
+framework relies on this property of the PQ component. Its combiner
+hashes the traditional ciphertext and public key but not the PQ
+ciphertext or public key, which avoids hashing the large HQC values
+in every operation. HQC provides C2PRI, as shown in {{CHH25}} and
+noted in Section 6.1.2 of {{GENERIC}}.
 
 {{CONCRETE}} instantiates {{GENERIC}} only for ML-KEM. This document
 therefore instantiates {{GENERIC}} directly for HQC. Each hybrid KEM
@@ -331,8 +350,8 @@ Each hybrid KEM uses the following components:
 {: #hybrid-components title="PQ/T hybrid KEM components"}
 
 The functions `GenerateKeyPair`, `DeriveKeyPair`, `Encaps`, and
-`Decaps` of each hybrid KEM are those of the CG framework in
-Section 5.5 of {{GENERIC}}, instantiated with its components.
+`Decaps` of each hybrid KEM are those of Sections 5.2 and 5.5 of
+{{GENERIC}}, instantiated with its components.
 
 The hybrid KEMs have the following constants, in octets:
 
