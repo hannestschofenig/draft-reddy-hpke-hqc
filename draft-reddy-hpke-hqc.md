@@ -322,8 +322,10 @@ ciphertext that decapsulates to the same shared secret. The CG
 framework relies on this property of the PQ component. Its combiner
 hashes the traditional ciphertext and public key but not the PQ
 ciphertext or public key, which avoids hashing the large HQC values
-in every operation. HQC provides C2PRI, as shown in {{CHH25}} and
-noted in Section 6.1.2 of {{GENERIC}}.
+in every operation. HQC provides C2PRI through the re-encryption
+check in HQC-KEM.Decaps (Section 3.6 of {{HQC}}). {{CHH25}} proves
+this property, and Section 6.1.2 of {{GENERIC}} lists HQC among the
+KEMs that have it.
 
 {{CONCRETE}} instantiates {{GENERIC}} only for ML-KEM. This document
 therefore instantiates {{GENERIC}} directly for HQC. Each hybrid KEM
