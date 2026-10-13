@@ -29,13 +29,24 @@ author:
 normative:
   HPKE: I-D.ietf-hpke-hpke
   PQ-HPKE: I-D.ietf-hpke-pq
+  GENERIC: I-D.irtf-cfrg-hybrid-kems
+  CONCRETE: I-D.irtf-cfrg-concrete-hybrid-kems
   HQC:
     title: Hamming Quasi-Cyclic (HQC)
     author:
     - org: HQC Project
     date: 2025-08-22
     target: https://pqc-hqc.org/doc/hqc_specifications_2025_08_22.pdf
+  FIPS202:
+    title: "SHA-3 Standard: Permutation-Based Hash and Extendable-Output Functions"
+    author:
+    - org: National Institute of Standards and Technology
+    date: 2015-08
+    seriesinfo:
+      FIPS: "202"
+    target: https://doi.org/10.6028/NIST.FIPS.202
 informative:
+  RFC9794:
   HPKE-IANA:
     title: Hybrid Public Key Encryption (HPKE)
     author:
@@ -47,6 +58,26 @@ informative:
     - org: National Institute of Standards and Technology
     date: 2025-03
     target: https://doi.org/10.6028/NIST.IR.8545
+  CDM23:
+    title: "Keeping Up with the KEMs: Stronger Security Notions for KEMs and automated analysis of KEM-based protocols"
+    author:
+    - name: Cas Cremers
+    - name: Alexander Dax
+    - name: Niklas Medinger
+    date: 2023
+    target: https://eprint.iacr.org/2023/1933.pdf
+  CHH25:
+    title: "Starfighters: On the General Applicability of X-Wing"
+    author:
+    - name: Deirdre Connolly
+    - name: Kathrin Hövelmanns
+    - name: Andreas Hülsing
+    - name: Stavros Kousidis
+    - name: Matthias Meijers
+    date: 2025
+    seriesinfo:
+      DOI: 10.1109/SP63933.2026.00143
+    target: https://eprint.iacr.org/2025/1397
 
 --- abstract
 
@@ -54,8 +85,10 @@ This document specifies Hamming Quasi-Cyclic (HQC) key encapsulation
 mechanisms for use with Hybrid Public Key Encryption (HPKE). It defines
 the HPKE KEM interface, deterministic key-pair derivation, public and
 private key encodings, and input validation for three HQC parameter
-sets. It requests three HPKE KEM algorithm identifiers and reuses the
-existing HPKE key schedule, encryption operations, and export interface.
+sets. It also defines three PQ/T hybrid KEMs that combine HQC with
+P-256, X25519, or P-384. It requests six HPKE KEM algorithm
+identifiers and reuses the existing HPKE key schedule, encryption
+operations, and export interface.
 
 --- middle
 
@@ -72,10 +105,15 @@ alternative to the lattice-based ML-KEM mechanisms specified for HPKE
 in {{PQ-HPKE}}. NIST selected HQC for standardization following its
 fourth-round evaluation {{NIST.IR.8545}}.
 
-This document specifies standalone HQC KEMs. It does not combine HQC
-with another KEM or a traditional key exchange. In particular, the word
-"hybrid" in HPKE refers to its public-key and symmetric construction
-and does not by itself denote a post-quantum/traditional hybrid KEM.
+This document specifies three standalone HQC KEMs and three PQ/T
+hybrid KEMs: HQC3-P256, HQC3-X25519, and HQC5-P384. The hybrid KEMs
+combine HQC with an elliptic-curve group using the framework of
+{{GENERIC}}. The standalone KEMs provide security against quantum
+attackers as long as HQC remains secure. The hybrid KEMs additionally
+provide security against classical attackers as long as either
+component remains secure. The word "hybrid" in HPKE refers to its
+public-key and symmetric construction. The term "PQ/T hybrid" is used
+as defined in {{RFC9794}}.
 
 This specification does not change the HPKE key schedule or message encryption.
 
@@ -109,11 +147,20 @@ and MUST NOT substitute the underlying HQC-PKE encryption scheme.
 | HQC-5 | 32 | 14421 | 7237 | 32 |
 {: #kem-sizes title="HPKE KEM constants in octets"}
 
-The public key and ciphertext encodings are those of {{HQC}}, Section 4.
-This profile selects its compressed `seedKEM` private-key representation.
-`Nsk` describes that serialization, not the size of an expanded internal
-key. Implementations MUST determine the parameter set from the selected
-KEM identifier and MUST NOT infer the parameter set from `Nsk` or `Nsecret`.
+The public key and ciphertext encodings are those of {{HQC}},
+Sections 3.5 and 3.6. This profile selects its compressed
+`seedKEM` private-key representation. `Nsk` describes that
+serialization, not the size of an expanded internal key.
+Implementations MUST determine the parameter set from the
+selected KEM identifier and MUST NOT infer the parameter set
+from `Nsk` or `Nsecret`.
+
+Note: While this document defines an HPKE KEM for HQC-1 in the
+interest of completeness, implementers should generally prefer
+HQC-3 or HQC-5. HQC-1 targets NIST security category 1. Use of
+HQC-3 or HQC-5 provides a hedge against future cryptanalysis of
+HQC that reduces its security without breaking it entirely, at
+the cost of larger keys and ciphertexts.
 
 ## Seed Expansion {#expansion}
 
@@ -135,6 +182,9 @@ of `seedKEM` and construction of the public key and rejection material.
 Thus the helper is deterministic. The byte encodings and internal XOF
 operations are inherited from the HQC procedure and are not repeated by
 this document.
+
+Note: Version 2025-08-22 of {{HQC}} does not define a key-generation
+function that takes `seedKEM` as input.
 
 An implementation MAY cache `expanded_sk` and `pk`. Such caching MUST
 produce the same results as expansion of the stored seed. A supplied
@@ -202,6 +252,9 @@ returns the seed on success. These failures are `DeserializeError`.
 An expanded private key MUST NOT be accepted as an alternative
 serialization, even if an implementation uses that form internally.
 
+Note: Version 2025-08-22 of {{HQC}} does not define checks on a
+received public key.
+
 `pk(sk)` is the public key returned by `ExpandSeed(sk)`. A private-key
 object MAY store the seed, the expanded key, and a cached public key,
 but MUST retain the specified seed serialization for export.
@@ -226,7 +279,7 @@ Failures of the public-key checks or an explicit failure of the
 encapsulation operation MUST cause `EncapError` when they occur within
 this interface. Prior deserialization failures use `DeserializeError`.
 A raw HQC shared secret is passed to HPKE without an additional
-COSE KDF, DHKEM ExtractAndExpand step, or application-specific hash.
+DHKEM ExtractAndExpand step or application-specific hash.
 
 ## Decapsulation {#decap}
 
@@ -241,10 +294,12 @@ def Decap(enc, skR):
 ~~~
 
 The two arguments to HQC-KEM.Decaps above are its decapsulation key
-and ciphertext, in that order. Any additional input checks required
-by {{HQC}} MUST also be performed. A failed explicit input check or
+and ciphertext, in that order. A failed explicit input check or
 explicit decapsulation failure MUST cause `DecapError` within this
 interface. No shared secret is returned after such a failure.
+
+Note: Version 2025-08-22 of {{HQC}} does not define additional
+input checks for decapsulation.
 
 Implicit rejection is part of HQC-KEM.Decaps and is not an explicit
 error. Its replacement shared secret MUST be passed to HPKE in the
@@ -253,6 +308,91 @@ expose the internal ciphertext-consistency result as an additional
 success flag or error. An incorrect shared secret is handled by the
 subsequent HPKE authentication checks when ciphertexts are opened.
 Secret export alone is not an authentication or key-confirmation step.
+
+# PQ/T Hybrid KEMs {#hybrid}
+
+This section defines three PQ/T hybrid KEMs that combine HQC with an
+elliptic-curve group: HQC3-P256, HQC3-X25519, and HQC5-P384. Each
+instantiates the C2PRI Combiner with a Nominal Group (CG) framework
+of Section 5.5 of {{GENERIC}}.
+
+C2PRI denotes ciphertext second-preimage resistance: given an
+honestly generated ciphertext, it is infeasible to find a different
+ciphertext that decapsulates to the same shared secret. The CG
+framework relies on this property of the PQ component. Its combiner
+hashes the traditional ciphertext and public key but not the PQ
+ciphertext or public key, which avoids hashing the large HQC values
+in every operation. HQC provides C2PRI through the re-encryption
+check in HQC-KEM.Decaps (Section 3.6 of {{HQC}}). {{CHH25}} proves
+this property, and Section 6.1.2 of {{GENERIC}} lists HQC among the
+KEMs that have it.
+
+{{CONCRETE}} instantiates {{GENERIC}} only for ML-KEM. This document
+therefore instantiates {{GENERIC}} directly for HQC. Each hybrid KEM
+uses the same framework, PRG function, and KDF as the ML-KEM hybrids
+in {{CONCRETE}}, and the same nominal group as its ML-KEM counterpart:
+HQC3-P256 as MLKEM768-P256, HQC3-X25519 as MLKEM768-X25519, and
+HQC5-P384 as MLKEM1024-P384.
+
+Each hybrid KEM uses the following components:
+
+* `KEM_PQ`: HQC-3 or HQC-5, as defined in {{kem}}.
+  `KEM_PQ.DeriveKeyPair(seed)` is `ExpandSeed(seed)` of {{expansion}},
+  with `Nseed` equal to 32.
+* `Group_T`: a nominal group of Section 3.1 of {{CONCRETE}}.
+* `PRG`: SHAKE256 {{FIPS202}}.
+* `KDF`: SHA3-256 {{FIPS202}}.
+* `Label`: an ASCII string that identifies the hybrid KEM.
+
+| Hybrid KEM | KEM_PQ | Group_T | PRG Nout | Label (hex) |
+|:-----------|:-------|:--------|---------:|:------------|
+| HQC3-P256 | HQC-3 | P-256 | 160 | "HQC3-P256" (485143332d50323536) |
+| HQC3-X25519 | HQC-3 | Curve25519 | 64 | "HQC3-X25519" (485143332d583235353139) |
+| HQC5-P384 | HQC-5 | P-384 | 80 | "HQC5-P384" (485143352d50333834) |
+{: #hybrid-components title="PQ/T hybrid KEM components"}
+
+The functions `GenerateKeyPair`, `DeriveKeyPair`, `Encaps`, and
+`Decaps` of each hybrid KEM are those of Sections 5.2 and 5.5 of
+{{GENERIC}}, instantiated with its components.
+
+The hybrid KEMs have the following constants, in octets:
+
+| Hybrid KEM | Nseed | Nek | Ndk | Nct | Nss |
+|:-----------|------:|----:|----:|----:|----:|
+| HQC3-P256 | 32 | 4579 | 32 | 9043 | 32 |
+| HQC3-X25519 | 32 | 4546 | 32 | 9010 | 32 |
+| HQC5-P384 | 32 | 7334 | 32 | 14518 | 32 |
+{: #hybrid-sizes title="PQ/T hybrid KEM constants"}
+
+`Nseed` is 32 for each hybrid KEM, as for the ML-KEM hybrids in
+{{CONCRETE}}. The PRG expands the seed to the length required by the
+components.
+
+Each hybrid KEM maps to the HPKE KEM interface as follows:
+
+* `DeriveKeyPair` derives a 32-octet seed with the SHAKE256 KDF of
+  Section 5 of {{PQ-HPKE}} and then applies the `DeriveKeyPair`
+  function of the hybrid KEM:
+
+~~~
+def DeriveKeyPair(ikm):
+    seed = SHAKE256.LabeledDerive(ikm, "DeriveKeyPair", "", 32)
+    return KEM_H.DeriveKeyPair(seed)
+~~~
+
+* `GenerateKeyPair`, `Encap`, and `Decap` are the `GenerateKeyPair`,
+  `Encaps`, and `Decaps` functions of the hybrid KEM.
+* `SerializePublicKey` and `SerializePrivateKey` return the key
+  unchanged. The public key is ek_PQ || ek_T, and the private key is
+  the seed.
+* `DeserializePublicKey` and `DeserializePrivateKey` reject input
+  whose length is not `Npk` or `Nsk`, respectively, with
+  `DeserializeError`, and otherwise return the input unchanged.
+* `Nsecret` is `Nss`, `Nenc` is `Nct`, `Npk` is `Nek`, and `Nsk` is
+  `Ndk`.
+
+The `suite_id` used in `LabeledDerive` is "KEM" || I2OSP(kem_id, 2),
+where `kem_id` is the value assigned to each hybrid KEM.
 
 # HPKE Modes and Ciphersuites {#hpke-use}
 
@@ -285,17 +425,18 @@ HPKE requires a CCA-secure KEM with the shared-secret properties
 specified in Section 9.2 of {{HPKE}}. This specification uses the
 complete HQC-KEM construction and its shared-secret output.
 
-Editorial note: The application of the HPKE security analyses to this
-exact HQC revision needs review before publication. In particular,
-this document does not establish the additional LEAK-BIND-K-PK and
-LEAK-BIND-K-CT properties discussed in Section 7 of {{PQ-HPKE}}.
-Their applicability to HQC must be assessed separately.
+HQC-KEM derives its shared secret from H(ek), and an accepted
+ciphertext is uniquely determined by ek, m, and salt through
+re-encryption. HQC-KEM is therefore expected to provide
+LEAK-BIND-K-PK and LEAK-BIND-K-CT by the same argument as ML-KEM
+in {{CDM23}}. No published analysis covers this HQC revision.
 
 The security of a complete ciphersuite is limited by its components,
-including any PSK and the KDF and AEAD. The length of the KEM output
-does not by itself determine the security strength. Applications MUST
-NOT treat a longer AEAD key as increasing the security category of
-the selected HQC parameter set.
+including any PSK and the KDF and AEAD. As discussed in Section 6
+of {{PQ-HPKE}}, the use of a post-quantum KEM does not by itself
+require a change of AEAD algorithm. However, some compliance regimes
+call for AEAD algorithms with longer keys, such as AES-256-GCM or
+ChaCha20Poly1305.
 
 All secret randomness MUST come from a cryptographically secure source.
 The private seed is sufficient to reconstruct the entire private key
@@ -321,9 +462,11 @@ HQC's public keys and ciphertexts impose substantial per-recipient
 message overhead. Applications SHOULD bound allocation and processing
 before performing expensive cryptographic operations. Transport,
 fragmentation, reassembly, and total message-size limits need to account
-for the values in {{kem-sizes}}.
+for the values in {{kem-sizes}} and {{hybrid-sizes}}.
 
 # IANA Considerations {#iana}
+
+## HPKE KEM Identifiers
 
 IANA is requested to add the following entries to the "HPKE KEM
 Identifiers" registry {{HPKE-IANA}}, using the template in Section 11.2
@@ -334,12 +477,28 @@ of {{HPKE}}.
 | TBD-HQC-1 | HQC-1 | 32 | 4433 | 2241 | 32 | no |
 | TBD-HQC-3 | HQC-3 | 32 | 8978 | 4514 | 32 | no |
 | TBD-HQC-5 | HQC-5 | 32 | 14421 | 7237 | 32 | no |
-{: #registrations title="Requested HQC HPKE KEM registrations"}
+| TBD-HQC3-P256 | HQC3-P256 | 32 | 9043 | 4579 | 32 | no |
+| TBD-HQC3-X25519 | HQC3-X25519 | 32 | 9010 | 4546 | 32 | no |
+| TBD-HQC5-P384 | HQC5-P384 | 32 | 14518 | 7334 | 32 | no |
+{: #registrations title="Requested HPKE KEM registrations"}
 
-The Reference for every row is this document, {{kem}}. Each TBD denotes
-a distinct two-octet identifier to be assigned by IANA.
+The Reference for the HQC-1, HQC-3, and HQC-5 rows is {{kem}} of this
+document. The Reference for the HQC3-P256, HQC3-X25519, and HQC5-P384
+rows is {{hybrid}} of this document. Each TBD denotes a distinct
+two-octet identifier to be assigned by IANA.
 
 This document requests no KDF or AEAD registrations.
 
---- back
+## Hybrid KEM Labels
 
+IANA is requested to add the following entries to the "Hybrid KEM
+Labels" registry defined in Section 7 of {{GENERIC}}.
+
+| Label | Framework | PQ Component | Traditional Component | KDF | PRG | Nseed | Nss | Reference |
+|:------|:----------|:-------------|:----------------------|:----|:----|------:|----:|:----------|
+| "HQC3-P256" | CG | HQC-3 | P-256 | SHA3-256 | SHAKE256 | 32 | 32 | This document |
+| "HQC3-X25519" | CG | HQC-3 | Curve25519 | SHA3-256 | SHAKE256 | 32 | 32 | This document |
+| "HQC5-P384" | CG | HQC-5 | P-384 | SHA3-256 | SHAKE256 | 32 | 32 | This document |
+{: #label-registrations title="Requested Hybrid KEM Label registrations"}
+
+--- back
