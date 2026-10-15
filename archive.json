@@ -1,6 +1,6 @@
 {
   "magic": "E!vIA5L86J2I",
-  "timestamp": "2026-10-13T04:21:14.500749+00:00",
+  "timestamp": "2026-10-15T02:12:31.018819+00:00",
   "repo": "hannestschofenig/draft-reddy-hpke-hqc",
   "labels": [
     {
@@ -54,6 +54,52 @@
       "color": "ffffff"
     }
   ],
-  "issues": [],
-  "pulls": []
+  "issues": [
+    {
+      "number": 2,
+      "id": "I_kwDOVEkep88AAAABXEU5nw",
+      "title": "Combiner security analysis and test vectors",
+      "url": "https://github.com/hannestschofenig/draft-reddy-hpke-hqc/issues/2",
+      "state": "OPEN",
+      "author": "tireddy2",
+      "authorAssociation": "COLLABORATOR",
+      "assignees": [],
+      "labels": [],
+      "body": "Hannes raised that the PQ/T hybrid KEMs need an analysis of the combiner's security properties, and that the draft needs test vectors.\n\nBoth depend on FIPS 207 (HQC) and are deferred until it is published:\n\n- Security analysis of the CG combiner with HQC: IND-CCA (C2PRI)   and binding properties, for the FIPS 207 version of HQC.\n- Test vectors for the standalone and hybrid KEMs.",
+      "createdAt": "2026-10-14T06:22:01Z",
+      "updatedAt": "2026-10-14T06:22:01Z",
+      "closedAt": null,
+      "comments": []
+    }
+  ],
+  "pulls": [
+    {
+      "number": 1,
+      "id": "PR_kwDOVEkep88AAAABIIPZGQ",
+      "title": "Further updates to the draft ",
+      "url": "https://github.com/hannestschofenig/draft-reddy-hpke-hqc/pull/1",
+      "state": "MERGED",
+      "author": "tireddy2",
+      "authorAssociation": "COLLABORATOR",
+      "assignees": [],
+      "labels": [],
+      "body": "",
+      "createdAt": "2026-10-13T08:25:24Z",
+      "updatedAt": "2026-10-14T11:19:34Z",
+      "baseRepository": "hannestschofenig/draft-reddy-hpke-hqc",
+      "baseRefName": "main",
+      "baseRefOid": "c0077be1c20ee7b613c2e132564d468e69d41195",
+      "headRepository": "tireddy2/draft-reddy-hpke-hqc",
+      "headRefName": "main",
+      "headRefOid": "36d4d5754c5c012ac1082250783d023b710e3f7f",
+      "closedAt": "2026-10-14T11:19:34Z",
+      "mergedAt": "2026-10-14T11:19:34Z",
+      "mergedBy": "tireddy2",
+      "mergeCommit": {
+        "oid": "6268ab1a4ec5b4af7b24fb0c8203437592149293"
+      },
+      "comments": [],
+      "reviews": []
+    }
+  ]
 }
